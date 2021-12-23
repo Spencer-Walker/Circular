@@ -17,7 +17,7 @@
         "Ns": 24,
         "local": 1,
         "mpd": -1,
-        "nev": 300,
+        "nev": 50,
         "EPSSetTarget": [
             -0.5,
             0.0
@@ -28,20 +28,18 @@
         "compute": 1,
         "max_its": 100000,
         "EPSSetType": "EPSKRYLOVSCHUR",
-        "EPSSetWhichEigenpairs": "EPS_SMALLEST_REAL",
-        "nuclei": {
-            "a": [
-            ],
-            "c": 0.0,
-            "b": [
-            ],
-            "c0": 1.0,
-            "Zc": 0.0
-        },
+        "EPSSetWhichEigenpairs": "EPS_SMALLEST_REAL",    
+        "a": [
+        ],
+        "c": 0.0,
+        "b": [
+        ],
+        "C0": 1.0,
+        "Zc": 0.0,
         "EPSSetProblemType": "EPS_PGNHEP"
     },
     "mpi": {
-        "np": 4,
+        "np": 1,
         "host": "asd",
         "assign_host": 0
     }

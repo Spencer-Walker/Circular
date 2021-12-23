@@ -48,26 +48,31 @@ interface
 end interface
 
   integer(HID_T) :: memtype, file_id, eps_group_id, param_file_id, eps_dat_id
+  integer(HID_T) :: ener_space, ener_dset, psi_space, psi_dset, h5_kind, plist_id
   integer(SIZE_T), parameter :: sdim = 300 
-  integer(HSIZE_T)  :: dims(1)
+  integer(HSIZE_T)  :: dims(1), ener_dims(1:2), psi_dims(1:3)
   integer :: forward, ret(3)
   PetscInt, parameter :: dp = kind(1.d0)
-  PetscInt :: Ns, nev, ncv, mpd, ncon, maxits, Nl, tmp_int, h5_err, num_proc, proc_id
-  PetscInt :: Istart, Iend, n, l, m, Ntot, mmax, i, j, row(1), col(19)
+  PetscInt, allocatable :: ix(:)
+  PetscInt :: Ns, nev, ncv, mpd, maxits, Nl, tmp_int, h5_err, num_proc, proc_id
+  PetscInt :: Istart, Iend, n, l, m, Ntot, mmax, i, row(1), col(19)
   character(len = 15) :: label ! file name w/o .h5
   character(len = 24)   :: file_name 
   character(len = 300)   :: tmp_character
-  PetscBool      :: rot_present, eps_two_sided, flg
+  PetscBool      :: rot_present, eps_two_sided 
   PetscReal,  parameter :: pi = 3.141592653589793238462643383279502884197169
   PetscReal :: rot_theta, tol, start_time, end_time, eps_target_components(2), kabs
   PetscReal :: C0, F, w, angular 
+  PetscReal, allocatable :: EE(:,:), uu(:,:,:)
   real(fgsl_double) :: ThreeJ
   PetscErrorCode :: ierr
   EPSProblemType :: eps_problem 
   PetscScalar :: eps_target, val(19), k
+  PetscScalar, allocatable :: E(:), u(:,:)
   Mat            :: H, S
+  Vec            :: Vi
   EPS            :: eps
-  EPSType :: eps_type, tname   
+  EPSType :: eps_type   
   EPSWhich :: eps_which
   EPSBalance :: eps_balance 
   external MyEPSMonitor
@@ -76,9 +81,6 @@ end interface
   !     Beginning of program
   ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   call CPU_TIME(start_time)
-
-  ! TMP 
-  C0 = 1d0
 
   call SlepcInitialize(PETSC_NULL_CHARACTER,ierr)
   if (ierr .ne. 0) then
@@ -145,6 +147,9 @@ end interface
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, kabs, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
+  call h5dopen_f(eps_group_id, "C0", eps_dat_id, h5_err)
+  call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, C0, dims, h5_err)
+  call h5dclose_f( eps_dat_id, h5_err)
 
   k = zexp(-(0d0,1d0)*rot_theta)*kabs
 
@@ -524,7 +529,6 @@ end interface
   call MatAssemblyBegin(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
   call MatAssemblyEnd(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
 
-  !call MatView(H,PETSC_VIEWER_STDOUT_WORLD,ierr);CHKERRA(ierr)
 !-----------------------------------------------------------------------------------------
 ! Create Eigensolver
 !-----------------------------------------------------------------------------------------
@@ -542,11 +546,60 @@ end interface
   !     ** Set solver parameters at runtime
   call EPSSetFromOptions(eps,ierr);CHKERRA(ierr)
 
-  ! Add the .h5 extension to the file label
-  file_name = trim(label)//'.h5'
-
   call EPSSolve(eps,ierr);CHKERRA(ierr)
 
+  allocate(ix(Ntot))
+  allocate(E(nev))
+  allocate(u(Ntot,nev))
+  call MatCreateVecs(H,Vi,PETSC_NULL_VEC,ierr);CHKERRA(ierr)
+
+  do i = 0, Ntot-1
+    ix(i) = i
+  end do 
+
+  do i = 0, nev-1
+    call EPSGetEigenpair(eps,i,E(i+1),PETSC_NULL_SCALAR,Vi,PETSC_NULL_VEC,ierr);CHKERRA(ierr)
+    call VecGetValues(Vi,Ntot,ix,u(1:Ntot,i+1),ierr);CHKERRA(ierr) 
+  end do 
+
+  ener_dims(1) = nev
+  ener_dims(2) = 2
+  
+  psi_dims(1) = Ntot
+  psi_dims(2) = nev
+  psi_dims(3) = 2
+
+  allocate(EE(nev,2))
+  allocate(uu(Ntot,nev,2))
+
+  uu(:,:,1) = realpart(u)
+  uu(:,:,2) = imagpart(u)
+
+  EE(:,1) = realpart(E)
+  EE(:,2) = imagpart(E)
+
+  h5_kind = h5kind_to_type( dp, H5_REAL_KIND)
+  file_name = trim(label)//'.h5'
+
+  call h5pcreate_f( H5P_FILE_ACCESS_F, plist_id, h5_err)
+  call h5pset_fapl_mpio_f( plist_id, MPI_COMM_WORLD, MPI_INFO_NULL, h5_err)
+  call h5fcreate_f( file_name, H5F_ACC_TRUNC_F, file_id, h5_err, access_prp = plist_id)
+
+  ! Creates an hdf5 interface that knows information about the data
+  call h5screate_simple_f( 2, ener_dims, ener_space, h5_err)
+    
+  ! Connects the datasapce to the hdf5 file and gives it a name 
+  call h5dcreate_f( file_id, "Energy", h5_kind, ener_space, ener_dset, h5_err)
+
+  ! Does the same as before for the energy but with the wfns 
+  call h5screate_simple_f( 3, psi_dims, psi_space, h5_err)
+  call h5dcreate_f( file_id, "Psi", h5_kind, psi_space, psi_dset, h5_err)
+
+  ! Writes E to Energy 
+  call h5dwrite_f( ener_dset, h5_kind, EE, ener_dims, h5_err)
+    
+  ! Writes u to Psi
+  call h5dwrite_f( psi_dset, h5_kind, uu, psi_dims, h5_err)
 
   ! Closes the hdf5 file
   call h5gclose_f( eps_group_id, h5_err)

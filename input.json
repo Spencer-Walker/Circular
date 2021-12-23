@@ -1,12 +1,8 @@
 {
-    "laser": {
-        "intensity": 10000000000.0,
-        "wavelength": 297.0
-    },
     "EPS": {
         "k": 0.6,
-        "F": 0.025,
-        "w": 0.4142181818  ,
+        "F": 0.0,
+        "w": 0.057  ,
         "EPSSetBalance": "EPS_BALANCE_NONE",
         "rot_present": 1,
         "rot_theta": 0.45,
@@ -17,7 +13,7 @@
         "Ns": 24,
         "local": 1,
         "mpd": -1,
-        "nev": 50,
+        "nev": 300,
         "EPSSetTarget": [
             -0.5,
             0.0

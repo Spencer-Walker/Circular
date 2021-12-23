@@ -551,6 +551,7 @@ end interface
   allocate(ix(Ntot))
   allocate(E(nev))
   allocate(u(Ntot,nev))
+  
   call MatCreateVecs(H,Vi,PETSC_NULL_VEC,ierr);CHKERRA(ierr)
 
   do i = 0, Ntot-1
@@ -568,6 +569,8 @@ end interface
   psi_dims(1) = Ntot
   psi_dims(2) = nev
   psi_dims(3) = 2
+
+  
 
   allocate(EE(nev,2))
   allocate(uu(Ntot,nev,2))

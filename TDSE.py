@@ -70,9 +70,9 @@ if data["EPS"]["compute"] == 1 :
   if data["mpi"]["assign_host"] == 1:
     print("basisf90")
     os.system("mpirun -np " + str(data["mpi"]["np"]) + \
-      " --host " + str(data["mpi"]["host"]) + " "+path+"/basisf90 -eps_monitor_conv")
+      " --host " + str(data["mpi"]["host"]) + " "+path+"/basisf90")
   else:
     print("basisf90")
     os.system("mpirun -np " + str(data["mpi"]["np"]) + \
-      " "+path+"/basisf90 -eps_monitor_conv")
+      " "+path+"/basisf90")
 

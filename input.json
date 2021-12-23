@@ -4,26 +4,27 @@
         "wavelength": 297.0
     },
     "EPS": {
-        "k": 1.0,
+        "k": 0.6,
+        "F": 0.025,
+        "w": 0.4142181818  ,
         "EPSSetBalance": "EPS_BALANCE_NONE",
         "rot_present": 1,
-        "rot_theta": 0.4,
+        "rot_theta": 0.45,
         "abs_tol": 1e-10,
         "label": "H",
         "location": "blah",
-        "Nl": 10,
-        "Ns": 15,
-        "mmax": 0,
+        "Nl": 4,
+        "Ns": 24,
         "local": 1,
         "mpd": -1,
-        "nev": 200,
+        "nev": 300,
         "EPSSetTarget": [
             -0.5,
             0.0
         ],
         "EPSSetTwoSided": 0,
         "ncv": -1,
-        "m_max": 0,
+        "m_max":4,
         "compute": 1,
         "max_its": 100000,
         "EPSSetType": "EPSKRYLOVSCHUR",
@@ -40,7 +41,7 @@
         "EPSSetProblemType": "EPS_PGNHEP"
     },
     "mpi": {
-        "np": 1,
+        "np": 4,
         "host": "asd",
         "assign_host": 0
     }

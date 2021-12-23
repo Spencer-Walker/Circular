@@ -60,7 +60,7 @@ end interface
   PetscBool      :: rot_present, eps_two_sided, flg
   PetscReal,  parameter :: pi = 3.141592653589793238462643383279502884197169
   PetscReal :: rot_theta, tol, start_time, end_time, eps_target_components(2), kabs
-  PetscReal :: C0, F, angular 
+  PetscReal :: C0, F, w, angular 
   real(fgsl_double) :: ThreeJ
   PetscErrorCode :: ierr
   EPSProblemType :: eps_problem 
@@ -79,8 +79,6 @@ end interface
 
   ! TMP 
   C0 = 1d0
-  F = 0.05d0
-
 
   call SlepcInitialize(PETSC_NULL_CHARACTER,ierr)
   if (ierr .ne. 0) then
@@ -135,6 +133,13 @@ end interface
     rot_theta = 0.d0
   end if
 
+  call h5dopen_f(eps_group_id, "F", eps_dat_id, h5_err)
+  call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, F, dims, h5_err)
+  call h5dclose_f( eps_dat_id, h5_err)
+
+  call h5dopen_f(eps_group_id, "w", eps_dat_id, h5_err)
+  call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, w, dims, h5_err)
+  call h5dclose_f( eps_dat_id, h5_err)
 
   call h5dopen_f(eps_group_id, "k", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, kabs, dims, h5_err)
@@ -151,7 +156,7 @@ end interface
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, Ns, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
-  call h5dopen_f(eps_group_id, "mmax", eps_dat_id, h5_err)
+  call h5dopen_f(eps_group_id, "m_max", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, mmax, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
@@ -385,7 +390,7 @@ end interface
     end if
   end do 
 
-
+  ! DC Stark Shifts 
   do i = Istart,Iend-1
     ret = reverse(i,Nl,Ns,mmax)
     n = ret(1)
@@ -468,9 +473,58 @@ end interface
     end if 
   end do 
 
+  do i = Istart,Iend-1
+    ret = reverse(i,Nl,Ns,mmax)
+    n = ret(1)
+    l = ret(2)
+    m = ret(3) 
+
+    if (m .lt. mmax .and. m .lt. l .and. l .lt. abs(m+1)+Nl) then 
+      row(1) = i
+      angular = dsqrt(dble((l+m+1)*(l-m)))
+
+      if (n .eq. 0) then 
+        col(1) = forward(n,l,m+1,Nl,Ns,mmax)
+        col(2) = forward(n+1,l,m+1,Nl,Ns,mmax)
+
+        val(1) = 1d0
+        val(2) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
+
+        val = -0.5d0*w*angular*val
+        call MatSetValues(H,1,row,2,col,val,INSERT_VALUES,ierr);CHKERRA(ierr)
+        call MatSetValues(H,2,col,1,row,val,INSERT_VALUES,ierr);CHKERRA(ierr)
+
+      else if (n .eq. Ns-1) then 
+        col(1) = forward(n-1,l,m+1,Nl,Ns,mmax)
+        col(2) = forward(n,l,m+1,Nl,Ns,mmax)
+
+        val(1) = -0.5d0*dsqrt(dble(n+2*l+1)/dble(n+l+1))*dsqrt(dble(n)/dble(n+l))
+        val(2) = 1d0
+
+        val = -0.5d0*w*angular*val
+        call MatSetValues(H,1,row,2,col,val,INSERT_VALUES,ierr);CHKERRA(ierr)
+        call MatSetValues(H,2,col,1,row,val,INSERT_VALUES,ierr);CHKERRA(ierr)
+
+      else 
+        col(1) = forward(n-1,l,m+1,Nl,Ns,mmax)
+        col(2) = forward(n,l,m+1,Nl,Ns,mmax)
+        col(3) = forward(n+1,l,m+1,Nl,Ns,mmax)
+
+        val(1) = -0.5d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
+        val(2) = 1d0
+        val(3) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
+
+        val = -0.5d0*w*angular*val
+        call MatSetValues(H,1,row,3,col,val,INSERT_VALUES,ierr);CHKERRA(ierr)
+        call MatSetValues(H,3,col,1,row,val,INSERT_VALUES,ierr);CHKERRA(ierr)
+      end if 
+    end if 
+  end do 
+
   call MatAssemblyBegin(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
   call MatAssemblyEnd(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
 
+  !call MatView(H,PETSC_VIEWER_STDOUT_WORLD,ierr);CHKERRA(ierr)
 !-----------------------------------------------------------------------------------------
 ! Create Eigensolver
 !-----------------------------------------------------------------------------------------

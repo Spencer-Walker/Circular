@@ -1,35 +1,34 @@
 {
     "EPS": {
         "k": 0.6,
-        "F": 0.0,
-        "w": 0.057  ,
+        "F": 0.8,
+        "w": 0.25,
         "EPSSetBalance": "EPS_BALANCE_NONE",
         "rot_present": 1,
-        "rot_theta": 0.45,
+        "rot_theta": 0.4,
         "abs_tol": 1e-10,
-        "label": "H",
+        "label": "H-0.800",
         "location": "blah",
-        "Nl": 4,
-        "Ns": 24,
+        "Nl": 20,
+        "Ns": 30,
         "local": 1,
         "mpd": -1,
-        "nev": 300,
+        "nev": 1000,
         "EPSSetTarget": [
             -0.5,
             0.0
         ],
         "EPSSetTwoSided": 0,
         "ncv": -1,
-        "m_max":4,
+        "m_max": 10,
         "compute": 1,
-        "max_its": 100000,
+        "max_its": 1000,
         "EPSSetType": "EPSKRYLOVSCHUR",
-        "EPSSetWhichEigenpairs": "EPS_SMALLEST_REAL",    
-        "a": [
-        ],
-        "c": 0.0,
-        "b": [
-        ],
+        "EPSSetWhichEigenpairs": "EPS_SMALLEST_REAL",
+        "Nshell": 0,
+        "a": [],
+        "C": 0.0,
+        "b": [],
         "C0": 1.0,
         "Zc": 0.0,
         "EPSSetProblemType": "EPS_PGNHEP"
@@ -40,4 +39,3 @@
         "assign_host": 0
     }
 }
-

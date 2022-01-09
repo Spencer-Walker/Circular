@@ -70,9 +70,9 @@ if data["EPS"]["compute"] == 1 :
   if data["mpi"]["assign_host"] == 1:
     print("basisf90")
     os.system("mpirun -np " + str(data["mpi"]["np"]) + \
-      " --host " + str(data["mpi"]["host"]) + " "+path+"/basisf90")
+      " --host " + str(data["mpi"]["host"]) + " "+path+"/basisf90	-eps_view_values :eigenvalues.m:ascii_matlab -eps_view_vectors :myeigenvectors.m:ascii_matlab -eps_monitor_conv")
   else:
     print("basisf90")
     os.system("mpirun -np " + str(data["mpi"]["np"]) + \
-      " "+path+"/basisf90")
+      " "+path+"/basisf90 -eps_view_values :myeigenvalues.m:ascii_matlab	-eps_view_vectors :eigenvectors.m:ascii_matlab -eps_monitor_conv")
 

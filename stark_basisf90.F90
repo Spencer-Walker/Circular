@@ -1,4 +1,4 @@
-function forward(n,l,m,NL,Ns,mmax) 
+function forward(n,l,m,Nl,Ns,mmax) 
   implicit none
   integer, intent(in)  :: n,l,m,Nl,Ns,mmax
   integer :: forward
@@ -54,9 +54,9 @@ end interface
   integer :: forward, ret(3)
   PetscInt, parameter :: dp = kind(1.d0)
   PetscInt :: Ns, nev, ncv, mpd, maxits, Nl, tmp_int, h5_err, num_proc, proc_id
-  PetscInt :: Istart, Iend, n, l, m, Nshell, Ntot, mmax, i, row(1)
+  PetscInt :: Istart, Iend, n, l, m, Nshell, Ntot, mmax, i, row(1), j, ierror
+  PetscInt :: n1
   PetscInt, allocatable :: col(:)
-  character(len = 15) :: label ! file name w/o .h5
   character(len = 24)   :: file_name 
   character(len = 300)   :: tmp_character
   PetscBool      :: rot_present, eps_two_sided 
@@ -67,7 +67,7 @@ end interface
   real(fgsl_double) :: ThreeJ
   PetscErrorCode :: ierr
   EPSProblemType :: eps_problem 
-  PetscScalar :: eps_target, k
+  PetscScalar :: eps_target, k, g, q, q2, q3 
   PetscScalar, allocatable :: val(:)
   Mat            :: H, S
   EPS            :: eps
@@ -75,7 +75,10 @@ end interface
   EPSWhich :: eps_which
   EPSBalance :: eps_balance 
   PetscViewer :: viewer
-  
+  type(module_py) :: opt
+  type(tuple) :: args
+  type(object) :: retval  
+  type(list) :: paths
   ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   !     Beginning of program
   ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -198,10 +201,6 @@ end interface
 
   call h5dopen_f(eps_group_id, "abs_tol", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, tol, dims, h5_err)
-  call h5dclose_f( eps_dat_id, h5_err)
-
-  call h5dopen_f(eps_group_id, "label", eps_dat_id, h5_err)
-  call h5dread_f(eps_dat_id, memtype, label, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
   call h5dopen_f(eps_group_id, "ncv", eps_dat_id, h5_err)
@@ -417,7 +416,65 @@ end interface
       val(3) = 0.25d0*k**2d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
       call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
     end if
-  end do  
+  end do
+  
+  !Short range potential
+  g = 2*(k/C)
+  ierror = forpy_initialize()
+  ierror = get_sys_path(paths)
+  ierror = paths%append("/home/becker/spwa4419/Documents/Circular/")
+  ierror = import_py(opt, "mymodule")
+
+  do i = Istart, Iend-1
+    ret = reverse(i,Nl,Ns,mmax)
+    n1 = ret(1)
+    l = ret(2)
+    m = ret(3)
+    row(1)  = i
+    do n = 0, Ns-1
+      ierror = tuple_create(args, 6)
+      ierror = args%setitem(0,n)
+      ierror = args%setitem(1,n1)
+      ierror = args%setitem(2,l)
+      ierror = args%setitem(3,k)
+      ierror = args%setitem(4,Zc)
+      ierror = args%setitem(5,g)
+      ierror = call_py(retval, opt, "yukawa", args)
+      ierror = cast(q, retval)
+      call args%destroy
+      call retval%destroy
+      col(n+1) = forward(n,l,m,Nl,Ns,mmax)
+      val(n+1) = q
+    end do
+    call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+  end do
+
+  do j = 1, Nshell
+    g = 2d0*(k/b(j))
+    do i = Istart, Iend-1
+      ret = reverse(i,Nl,Ns,mmax)
+      n1 = ret(1)
+      l = ret(2)
+      m = ret(3)
+      row(1)  = i
+      val = 0
+      do n = 0, Ns-1
+        ierror = tuple_create(args, 5)
+        ierror = args%setitem(0,n)
+        ierror = args%setitem(1,n1)
+        ierror = args%setitem(2,l)
+        ierror = args%setitem(3,g)
+        ierror = args%setitem(4,a(j))
+        ierror = call_py(retval, opt, "shell", args)
+        ierror = cast(q, retval)
+        call args%destroy
+        call retval%destroy
+        col(n+1) =  forward(n,l,m,Nl,Ns,mmax)
+        val(n+1) =  q
+      end do
+      call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+    end do
+  end do
 
   ! DC Stark Shifts
   do i = Istart,Iend-1
@@ -575,8 +632,9 @@ end interface
   call EPSSolve(eps,ierr);CHKERRA(ierr)
 
 
-  file_name = 'stark_eigenvectors.h5'
-  call PetscViewerHDF5Open(MPI_COMM_WORLD, file_name, FILE_MODE_WRITE, viewer, ierr);CHKERRA(ierr)
+  file_name = 'stark_eigenvectors.bin'
+  call PetscViewerBinaryOpen(MPI_COMM_WORLD, file_name, FILE_MODE_WRITE, viewer, ierr)
+  CHKERRA(ierr)
   call EPSVectorsView(eps, viewer, ierr);CHKERRA(ierr)
   call PetscViewerDestroy(viewer,ierr);CHKERRA(ierr)
 
@@ -589,6 +647,6 @@ end interface
   call PetscPrintf(MPI_COMM_WORLD, 'time   :'//trim(tmp_character)//"\n", ierr)
   CHKERRA(ierr)
   call SlepcFinalize(ierr)
-
+  call forpy_finalize
 
 end program main 

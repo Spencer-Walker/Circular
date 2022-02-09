@@ -1,7 +1,7 @@
+import numpy as np
 import os 
 import json
 import h5py
-import numpy as np
 import sympy as syms
 from scipy.sparse import diags
 from sympy import lambdify
@@ -67,12 +67,12 @@ params.close()
 
 # Compute basis
 if data["EPS"]["compute"] == 1 :
-  if data["mpi"]["assign_host"] == 1:
-    print("basisf90")
-    os.system("mpirun -np " + str(data["mpi"]["np"]) + \
-      " --host " + str(data["mpi"]["host"]) + " "+path+"/basisf90	-eps_view_values :eigenvalues.m:ascii_matlab -eps_view_vectors :myeigenvectors.m:ascii_matlab -eps_monitor_conv")
-  else:
-    print("basisf90")
-    os.system("mpirun -np " + str(data["mpi"]["np"]) + \
-      " "+path+"/basisf90 -eps_view_values :myeigenvalues.m:ascii_matlab	-eps_view_vectors :eigenvectors.m:ascii_matlab -eps_monitor_conv")
+  print("atomic_basisf90")
+  os.system(path+"/atomic_basisf90 -eps_view_values :atomic_eigenvalues.m:ascii_matlab -eps_monitor_conv")
+  print("stark_basisf90")
+  os.system("mpirun -np " + str(data["mpi"]["np"]) + \
+    " "+path+"/stark_basisf90 -eps_view_values :stark_eigenvalues.m:ascii_matlab -eps_monitor_conv")
+  print("overlapsf90")
+  os.system("mpirun -np 1 " + \
+    " "+path+"/overlapsf90")
 

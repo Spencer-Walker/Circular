@@ -1,35 +1,3 @@
-function forward(n,l,m,NL,Ns,mmax) 
-  implicit none
-  integer, intent(in)  :: n,l,m,Nl,Ns,mmax
-  integer :: forward
-
-  forward = (mmax+m)*Nl*Ns + (l-abs(m))*Ns + n
-
-end function forward
-
-function reverse(i,Nl,Ns,mmax) 
-  implicit none
-  integer, intent(in)  :: Nl,Ns,mmax,i
-  integer :: reverse(3), n,l,m
-
-  m = floor(dble(i)/dble(Nl*Ns))-mmax
-  l = floor(dble(i-(mmax+m)*Nl*Ns)/Ns)+abs(m)
-  n = i - (mmax+m)*Nl*Ns - (l-abs(m))*Ns
-  reverse(1) = n
-  reverse(2) = l
-  reverse(3) = m
-end function reverse
-
-function ThreeJ(l1,l2,l3,m1,m2,m3)
-  use fgsl
-  use iso_c_binding
-  implicit none 
-  integer, intent(in) :: l1, l2, l3, m1, m2, m3
-  real(fgsl_double) :: ThreeJ 
-  ThreeJ = fgsl_sf_coupling_3j(2*l1,2*l2,2*l3,2*m1,2*m2,2*m3)
-  return 
-end function ThreeJ
-
 program main
 #include <slepc/finclude/slepceps.h>
 use slepceps
@@ -38,36 +6,25 @@ use mpi
 use fgsl
 use forpy_mod
 use iso_c_binding
+use forpy_mod
   implicit none
-
-interface 
-  function reverse(i,Nl,Ns,mmax) 
-    implicit none
-    integer, intent(in)  :: Nl,Ns,mmax,i
-    integer :: reverse(3), n,l,m
-  end function reverse
-end interface
-
   integer(HID_T) :: memtype, eps_group_id, param_file_id, eps_dat_id
   integer(SIZE_T), parameter :: sdim = 300 
   integer(HSIZE_T)  :: dims(1)
-  integer :: forward, ret(3)
   PetscInt, parameter :: dp = kind(1.d0)
-  PetscInt :: Ns, nev, ncv, mpd, maxits, Nl, tmp_int, h5_err, num_proc, proc_id
-  PetscInt :: Istart, Iend, n, l, m, Nshell, Ntot, mmax, i, row(1)
+  PetscInt :: Ns, nev, ncv, mpd, maxits, tmp_int, h5_err, num_proc, proc_id
+  PetscInt :: n, l, Nshell, Ntot, mmax, i, j, row(1), lmax, Nl, ierror
   PetscInt, allocatable :: col(:)
-  character(len = 15) :: label ! file name w/o .h5
-  character(len = 24)   :: file_name 
-  character(len = 300)   :: tmp_character
+  character(len = 6)    :: fmt,strl  ! format descriptor
+  character(len = 300)   :: tmp_character, file_name
   PetscBool      :: rot_present, eps_two_sided 
   PetscReal,  parameter :: pi = 3.141592653589793238462643383279502884197169
   PetscReal :: rot_theta, tol, start_time, end_time, eps_target_components(2), kabs
-  PetscReal :: C0, C, Zc, F, w, angular 
+  PetscReal :: C0, C, Zc 
   PetscReal, allocatable ::  a(:), b(:)
-  real(fgsl_double) :: ThreeJ
   PetscErrorCode :: ierr
   EPSProblemType :: eps_problem 
-  PetscScalar :: eps_target, k
+  PetscScalar :: eps_target, k, eigr, eigi, q, q2, q3, g
   PetscScalar, allocatable :: val(:)
   Mat            :: H, S
   EPS            :: eps
@@ -75,11 +32,16 @@ end interface
   EPSWhich :: eps_which
   EPSBalance :: eps_balance 
   PetscViewer :: viewer
-  
+  type(module_py) :: opt
+  type(tuple) :: args 
+  type(object) :: retval
   ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   !     Beginning of program
   ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
   call CPU_TIME(start_time)
+
+  ierror = forpy_initialize()
+  ierror = import_py(opt, "mpmath")
 
   call SlepcInitialize(PETSC_NULL_CHARACTER,ierr)
   if (ierr .ne. 0) then
@@ -87,13 +49,13 @@ end interface
     CHKERRA(ierr)
     stop
   end if
-  call MPI_Comm_rank(PETSC_COMM_WORLD,proc_id,ierr);CHKERRA(ierr)
-  call MPI_Comm_size(PETSC_COMM_WORLD,num_proc,ierr);CHKERRA(ierr)
+  call MPI_Comm_rank(PETSC_COMM_SELF,proc_id,ierr);CHKERRA(ierr)
+  call MPI_Comm_size(PETSC_COMM_SELF,num_proc,ierr);CHKERRA(ierr)
 
   ! Initialize hdf5 
   call h5open_f( h5_err)
   if ( h5_err .ne. 0 ) then
-    call PetscPrintf(MPI_COMM_WORLD, 'h5open_f failed\n', ierr);CHKERRA(ierr)
+    call PetscPrintf(MPI_COMM_SELF, 'h5open_f failed\n', ierr);CHKERRA(ierr)
     stop
   end if
 
@@ -134,19 +96,12 @@ end interface
     rot_theta = 0.d0
   end if
 
-  call h5dopen_f(eps_group_id, "F", eps_dat_id, h5_err)
-  call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, F, dims, h5_err)
-  call h5dclose_f( eps_dat_id, h5_err)
-
-  call h5dopen_f(eps_group_id, "w", eps_dat_id, h5_err)
-  call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, w, dims, h5_err)
-  call h5dclose_f( eps_dat_id, h5_err)
-
   call h5dopen_f(eps_group_id, "k", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, kabs, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
   k = zexp(-(0d0,1d0)*rot_theta)*kabs
+  
 
   call h5dopen_f(eps_group_id, "C0", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, C0, dims, h5_err)
@@ -163,34 +118,40 @@ end interface
   call h5dopen_f(eps_group_id, "Nshell", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, Nshell, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)  
-
+  
   allocate(a(Nshell),b(Nshell))
   dims(1) = Nshell
   call h5dopen_f(eps_group_id, "a", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, a, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
-
+  
   call h5dopen_f(eps_group_id, "b", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, b, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
+  print*, 'a =', a
+  print*, 'b =', b
 
   dims(1) = 1
   call h5dopen_f(eps_group_id, "Nl", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, Nl, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
-  call h5dopen_f(eps_group_id, "Ns", eps_dat_id, h5_err)
-  call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, Ns, dims, h5_err)
-  call h5dclose_f( eps_dat_id, h5_err)
-
   call h5dopen_f(eps_group_id, "m_max", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, mmax, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
-  call h5dopen_f(eps_group_id, "nev", eps_dat_id, h5_err)
+  lmax = Nl - 1 + mmax 
+   
+  call h5dopen_f(eps_group_id, "Ns", eps_dat_id, h5_err)
+  call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, Ns, dims, h5_err)
+  call h5dclose_f( eps_dat_id, h5_err)
+  
+  call h5dopen_f(eps_group_id, "Na", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, nev, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
+
+  mmax = 0 ! Spherically symmetric problem
 
   call h5dopen_f(eps_group_id, "max_its", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_INTEGER, maxits, dims, h5_err)
@@ -198,10 +159,6 @@ end interface
 
   call h5dopen_f(eps_group_id, "abs_tol", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, H5T_NATIVE_DOUBLE, tol, dims, h5_err)
-  call h5dclose_f( eps_dat_id, h5_err)
-
-  call h5dopen_f(eps_group_id, "label", eps_dat_id, h5_err)
-  call h5dread_f(eps_dat_id, memtype, label, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
 
   call h5dopen_f(eps_group_id, "ncv", eps_dat_id, h5_err)
@@ -236,7 +193,7 @@ end interface
     CHKERRA(ierr)
     eps_problem = EPS_NHEP
   end if 
-  
+
 
   dims(1) = 2
   call h5dopen_f(eps_group_id, "EPSSetTarget", eps_dat_id, h5_err)
@@ -299,6 +256,7 @@ end interface
     eps_type = EPSKRYLOVSCHUR
   end if 
 
+
   call h5dopen_f(eps_group_id, "EPSSetWhichEigenpairs", eps_dat_id, h5_err)
   call h5dread_f(eps_dat_id, memtype, tmp_character, dims, h5_err)
   call h5dclose_f( eps_dat_id, h5_err)
@@ -328,30 +286,41 @@ end interface
     eps_which = EPS_SMALLEST_REAL
   end if 
 
-  Ntot = forward(Ns-1,NL-1+abs(mmax),mmax,Nl,Ns,mmax)+1
+  Ntot = Ns
 
-  call MatCreate(PETSC_COMM_WORLD,S,ierr);CHKERRA(ierr)
+
+do l = 0, lmax
+  print*, 'l =', l
+  if ( l .le. 9 ) then
+    fmt = '(I1.1)'
+  else if ( l .le. 99 ) then
+    fmt = '(I2.2)'
+  else
+    fmt = '(I3.3)'
+  end if
+
+  write(strl,fmt) l
+
+
+  call MatCreate(PETSC_COMM_SELF,S,ierr);CHKERRA(ierr)
   call MatSetSizes(S,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
   call MatSetFromOptions(S,ierr);CHKERRA(ierr)
   call MatSetUp(S,ierr);CHKERRA(ierr)
   
-  call MatCreate(PETSC_COMM_WORLD,H,ierr);CHKERRA(ierr)
+  call MatCreate(PETSC_COMM_SELF,H,ierr);CHKERRA(ierr)
   call MatSetSizes(H,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
   call MatSetFromOptions(H,ierr);CHKERRA(ierr)
   call MatSetUp(H,ierr);CHKERRA(ierr)
   
-  call MatGetOwnershipRange(H,Istart,Iend,ierr);CHKERRA(ierr)
 
 !-----------------------------------------------------------------------------------------
 ! Build Overlap Matrix
 !-----------------------------------------------------------------------------------------
-  
   allocate(col(Ns),val(Ns))
-  do i = Istart,Iend-1
-    ret = reverse(i,Nl,Ns,mmax)
-    n = ret(1)
-    l = ret(2)
-    m = ret(3) 
+
+   
+  do i = 0,Ns-1
+    n = i  
     if (n .eq. 0) then 
       row(1) = i
       col(1) = i
@@ -378,18 +347,17 @@ end interface
     end if
   end do 
 
+
+
+
   call MatAssemblyBegin(S,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
   call MatAssemblyEnd(S,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
 
 !-----------------------------------------------------------------------------------------
 ! Build Field-Free Matrix
 !-----------------------------------------------------------------------------------------
-  do i = Istart,Iend-1
-    ret = reverse(i,Nl,Ns,mmax)
-    n = ret(1)
-    l = ret(2)
-    m = ret(3) 
-    
+  do i = 0,Ns-1  
+    n = i 
     if (n .eq. 0) then 
       ! Main diagonal
       row(1) = i
@@ -419,167 +387,114 @@ end interface
     end if
   end do  
 
-  ! DC Stark Shifts
-  do i = Istart,Iend-1
-    ret = reverse(i,Nl,Ns,mmax)
-    n = ret(1)
-    l = ret(2)
-    m = ret(3) 
-    row(1) = i
-    if (l .lt. abs(m)+Nl-1) then 
-      angular = (-1d0)**dble(m)*dsqrt(dble(2*l+1)*dble(2*l+3))*ThreeJ(l,1,l+1,0,0,0)*ThreeJ(l,1,l+1,-m,0,m)
-      if (n .eq. 0) then
-        col(1) = forward(n,l+1,m,Nl,Ns,mmax)
-        col(2) = forward(n+1,l+1,m,Nl,Ns,mmax)
 
-        val(1) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(2) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
+  g = 2*(k/C) 
+  do i = 0, Ns-1
+    row(1)  = i
+    do n = 0, Ns-1
+      ierror = tuple_create(args, 4)
+      ierror = args%setitem(0, -i)
+      ierror = args%setitem(1, -n)
+      ierror = args%setitem(2, -n-i-2*l-1)
+      ierror = args%setitem(3, 1-g**2)
+      ierror = call_py(retval, opt, "hyp2f1", args)
+      ierror = cast_nonstrict(q, retval)
+      col(n+1) = n
+      val(n+1) = -k*dsqrt(dgamma(dble(n+1))*dgamma(dble(i+1))/(dble((n+l+1)*(i+l+1)) &
+      &*dgamma(dble(n+2*l+2))*dgamma(dble(i+2*l+2))))*Zc*dgamma(dble(n+i+2*l+2)) &
+      &/(dgamma(dble(n+1))*dgamma(dble(i+1)))*(g**dble(2*l+2)/(g+1)**dble(n+i+2*l+2))*q
+    end do
+    call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)  
+  end do 
 
-        val = F*angular*val
-        call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,2,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
+  do j = 1, Nshell 
+    g = 2d0*(k/b(j))
+    do i = 0, Ns-1
+      row(1)  = i
+      do n = 0, Ns-1
+        ierror = tuple_create(args, 4)
+        ierror = args%setitem(0, -i)
+        ierror = args%setitem(1, -n)
+        ierror = args%setitem(2, -n-i-2*l-1)
+        ierror = args%setitem(3, 1-g**2)
+        ierror = call_py(retval, opt, "hyp2f1", args)
+        ierror = cast_nonstrict(q, retval)
 
-      else if (n .eq. 1) then 
-        col(1) = forward(n-1,l+1,m,Nl,Ns,mmax)
-        col(2) = forward(n,l+1,m,Nl,Ns,mmax)
-        col(3) = forward(n+1,l+1,m,Nl,Ns,mmax)
+        ierror = tuple_create(args, 4)
+        ierror = args%setitem(0, -i)
+        ierror = args%setitem(1, -n-1)
+        ierror = args%setitem(2, -n-i-2*l-2)
+        ierror = args%setitem(3, 1-g**2)
+        ierror = call_py(retval, opt, "hyp2f1", args)
+        ierror = cast_nonstrict(q2, retval)
 
-        val(1) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
-        val(2) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(3) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
+        ierror = tuple_create(args, 4)
+        ierror = args%setitem(0, -i)
+        ierror = args%setitem(1, -n+1)
+        ierror = args%setitem(2, -n-i-2*l)
+        ierror = args%setitem(3, 1-g**2)
+        ierror = call_py(retval, opt, "hyp2f1", args)
+        ierror = cast_nonstrict(q3, retval)
         
-        val = F*angular*val
-        call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,3,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-
-      else if (n .eq. 2) then
-        col(1) = forward(n-2,l+1,m,Nl,Ns,mmax)
-        col(2) = forward(n-1,l+1,m,Nl,Ns,mmax)
-        col(3) = forward(n,l+1,m,Nl,Ns,mmax)
-        col(4) = forward(n+1,l+1,m,Nl,Ns,mmax)
-
-        val(1) = 0.5d0*k**(-1d0)*dble(2*n+3*l+2)*dsqrt(dble(n*(n-1))/dble((n+l+1)*(n+l)))
-        val(2) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
-        val(3) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(4) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
-
-        val = F*angular*val
-        call MatSetValues(H,1,row,4,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,4,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-
-      else if (n .eq. Ns-1) then 
-        col(1) = forward(n-3,l+1,m,Nl,Ns,mmax)
-        col(2) = forward(n-2,l+1,m,Nl,Ns,mmax)
-        col(3) = forward(n-1,l+1,m,Nl,Ns,mmax)
-        col(4) = forward(n,l+1,m,Nl,Ns,mmax)
-
-        val(1) = -0.25d0*k**(-1d0)*dsqrt(dble(n*(n-1)*(n-2)*(n+2*l+1))/dble((n+l+1)*(n+l-1)))
-        val(2) = 0.5d0*k**(-1d0)*dble(2*n+3*l+2)*dsqrt(dble(n*(n-1))/dble((n+l+1)*(n+l)))
-        val(3) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
-        val(4) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-
-        val = F*angular*val
-        call MatSetValues(H,1,row,4,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,4,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-
-      else 
-        col(1) = forward(n-3,l+1,m,Nl,Ns,mmax)
-        col(2) = forward(n-2,l+1,m,Nl,Ns,mmax)
-        col(3) = forward(n-1,l+1,m,Nl,Ns,mmax)
-        col(4) = forward(n,l+1,m,Nl,Ns,mmax)
-        col(5) = forward(n+1,l+1,m,Nl,Ns,mmax)
-
-        val(1) = -0.25d0*k**(-1d0)*dsqrt(dble(n*(n-1)*(n-2)*(n+2*l+1))/dble((n+l+1)*(n+l-1)))
-        val(2) = 0.5d0*k**(-1d0)*dble(2*n+3*l+2)*dsqrt(dble(n*(n-1))/dble((n+l+1)*(n+l)))
-        val(3) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
-        val(4) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(5) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
-
-        val = F*angular*val 
-        call MatSetValues(H,1,row,5,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,5,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-      end if 
-    end if 
+        col(n+1) = n
+        val(n+1) = -dsqrt(dgamma(dble(n+1))*dgamma(dble((i+1))) &
+                & /(dble(n+l+1)*dble(i+l+1)*dgamma(dble(n+2*l+2))*dgamma(dble(i+2*l+2))))&
+                & *(0.5d0*a(j))*( 2d0*dble(n+l+1)*(dgamma(dble(n+i+2*l+2)) &
+                & /(dgamma(dble(n+1))*dgamma(dble(i+1))))*(g**dble(2*l+2)/(g+1d0)**dble(n+i+2*l+2))*q& 
+                & -dble(n+1)*(dgamma(dble(n+i+2*l+3))/(dgamma(dble(n+2))*dgamma(dble(i+1))))&
+                & *(g**dble(2*l+2)/(g+1d0)**dble(n+i+2*l+3))*q2&
+                & -dble(n+2*l+1)*(dgamma(dble(n+i+2*l+1))/(dgamma(dble(n))*dgamma(dble(i+1))))&
+                & *(g**dble(2*l+2)/(g+1)**dble(n+i+2*l+1)) *q3)
+      end do
+      call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+    end do
   end do 
-
-  do i = Istart,Iend-1
-    ret = reverse(i,Nl,Ns,mmax)
-    n = ret(1)
-    l = ret(2)
-    m = ret(3) 
-
-    if (m .lt. mmax .and. m .lt. l .and. l .lt. abs(m+1)+Nl) then 
-      row(1) = i
-      angular = dsqrt(dble((l+m+1)*(l-m)))
-
-      if (n .eq. 0) then 
-        col(1) = forward(n,l,m+1,Nl,Ns,mmax)
-        col(2) = forward(n+1,l,m+1,Nl,Ns,mmax)
-
-        val(1) = 1d0
-        val(2) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
-
-        val = -0.5d0*w*angular*val
-        call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,2,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-
-      else if (n .eq. Ns-1) then 
-        col(1) = forward(n-1,l,m+1,Nl,Ns,mmax)
-        col(2) = forward(n,l,m+1,Nl,Ns,mmax)
-
-        val(1) = -0.5d0*dsqrt(dble(n+2*l+1)/dble(n+l+1))*dsqrt(dble(n)/dble(n+l))
-        val(2) = 1d0
-
-        val = -0.5d0*w*angular*val
-        call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,2,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-
-      else 
-        col(1) = forward(n-1,l,m+1,Nl,Ns,mmax)
-        col(2) = forward(n,l,m+1,Nl,Ns,mmax)
-        col(3) = forward(n+1,l,m+1,Nl,Ns,mmax)
-
-        val(1) = -0.5d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
-        val(2) = 1d0
-        val(3) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
-
-        val = -0.5d0*w*angular*val
-        call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-        call MatSetValues(H,3,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
-      end if 
-    end if 
-  end do 
-
-  deallocate(a,b)
   deallocate(col,val)
-
   call MatAssemblyBegin(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
   call MatAssemblyEnd(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
+
 !-----------------------------------------------------------------------------------------
 ! Create Eigensolver
 !-----------------------------------------------------------------------------------------
-  call EPSCreate(PETSC_COMM_WORLD,eps,ierr);CHKERRA(ierr)
-
+  call EPSCreate(PETSC_COMM_SELF,eps,ierr);CHKERRA(ierr)
   call EPSSetOperators(eps,H,S,ierr);CHKERRA(ierr)
 
   call EPSSetWhichEigenpairs(eps,eps_which,ierr);CHKERRA(ierr)
   call EPSSetType(eps,eps_type,ierr);CHKERRA(ierr)
 
+
   call EPSSetTolerances(eps,tol,maxits,ierr);CHKERRA(ierr)
   call EPSSetProblemType(eps,eps_problem,ierr);CHKERRA(ierr)
   call EPSSetDimensions(eps,nev,ncv,mpd,ierr);CHKERRA(ierr)
+
 
   !     ** Set solver parameters at runtime
   call EPSSetFromOptions(eps,ierr);CHKERRA(ierr)
 
   call EPSSolve(eps,ierr);CHKERRA(ierr)
 
-
-  file_name = 'stark_eigenvectors.h5'
-  call PetscViewerHDF5Open(MPI_COMM_WORLD, file_name, FILE_MODE_WRITE, viewer, ierr);CHKERRA(ierr)
+  file_name = 'atomic_eigenvectors_l'//trim(strl)//'.bin'
+  call PetscViewerBinaryOpen(MPI_COMM_WORLD, file_name, FILE_MODE_WRITE, viewer, ierr)
+  CHKERRA(ierr)
   call EPSVectorsView(eps, viewer, ierr);CHKERRA(ierr)
   call PetscViewerDestroy(viewer,ierr);CHKERRA(ierr)
 
+
+  if (proc_id .eq. 0 ) then 
+    open( unit = 10, file = 'atomic_eigenvalues_l'//trim(strl)//'-real.csv')
+    open( unit = 20, file = 'atomic_eigenvalues_l'//trim(strl)//'-imag.csv') 
+    do i = 0, nev-1
+      call EPSGetEigenvalue(eps, i, eigr, eigi, ierr);CHKERRA(ierr)
+      write(10,*) realpart(eigr)
+      write(20,*) imagpart(eigr)
+    end do 
+  end if 
+
+  call EPSDestroy(eps,ierr);CHKERRA(ierr) 
+  call MatDestroy(S,ierr);CHKERRA(ierr)
+  call MatDestroy(H,ierr);CHKERRA(ierr)
+
+end do 
 
   ! Closes the hdf5 file
   call h5gclose_f( eps_group_id, h5_err)
@@ -589,6 +504,6 @@ end interface
   call PetscPrintf(MPI_COMM_WORLD, 'time   :'//trim(tmp_character)//"\n", ierr)
   CHKERRA(ierr)
   call SlepcFinalize(ierr)
-
+  call forpy_finalize
 
 end program main 

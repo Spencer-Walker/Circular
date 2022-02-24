@@ -36,5 +36,3 @@ def shell(*args,**kwargs):
       *mp.hyp2f1(-i,-n-1,-n-i-2*l-2,1-g**2)))
   return ret
 
-
-

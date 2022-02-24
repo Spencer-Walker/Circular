@@ -256,10 +256,8 @@ use forpy_mod
     eps_type = EPSKRYLOVSCHUR
   end if 
 
+  tmp_character = "EPS_SMALLEST_REAL"
 
-  call h5dopen_f(eps_group_id, "EPSSetWhichEigenpairs", eps_dat_id, h5_err)
-  call h5dread_f(eps_dat_id, memtype, tmp_character, dims, h5_err)
-  call h5dclose_f( eps_dat_id, h5_err)
   if (trim(tmp_character) .eq. "EPS_LARGEST_MAGNITUDE") then 
     eps_which = EPS_LARGEST_MAGNITUDE 
   else if (trim(tmp_character) .eq. "EPS_SMALLEST_MAGNITUDE") then 
@@ -283,161 +281,164 @@ use forpy_mod
   else
     call PetscPrintf(MPI_COMM_WORLD, "EPSWhich not supported defaulting to EPS_SMALLEST_REAL\n", ierr)
     CHKERRA(ierr)
-    eps_which = EPS_SMALLEST_REAL
-  end if 
-
-  Ntot = Ns
+            eps_which = EPS_SMALLEST_REAL
+          end if 
 
 
-do l = 0, lmax
-  print*, 'l =', l
-  if ( l .le. 9 ) then
-    fmt = '(I1.1)'
-  else if ( l .le. 99 ) then
-    fmt = '(I2.2)'
-  else
-    fmt = '(I3.3)'
-  end if
-
-  write(strl,fmt) l
+          Ntot = Ns
 
 
-  call MatCreate(PETSC_COMM_SELF,S,ierr);CHKERRA(ierr)
-  call MatSetSizes(S,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
-  call MatSetFromOptions(S,ierr);CHKERRA(ierr)
-  call MatSetUp(S,ierr);CHKERRA(ierr)
-  
-  call MatCreate(PETSC_COMM_SELF,H,ierr);CHKERRA(ierr)
-  call MatSetSizes(H,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
-  call MatSetFromOptions(H,ierr);CHKERRA(ierr)
-  call MatSetUp(H,ierr);CHKERRA(ierr)
-  
+        do l = 0, lmax
+          print*, 'l =', l
+          if ( l .le. 9 ) then
+            fmt = '(I1.1)'
+          else if ( l .le. 99 ) then
+            fmt = '(I2.2)'
+          else
+            fmt = '(I3.3)'
+          end if
 
-!-----------------------------------------------------------------------------------------
-! Build Overlap Matrix
-!-----------------------------------------------------------------------------------------
-  allocate(col(Ns),val(Ns))
-
-   
-  do i = 0,Ns-1
-    n = i  
-    if (n .eq. 0) then 
-      row(1) = i
-      col(1) = i
-      col(2) = i+1
-      val(1) = 1d0
-      val(2) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
-      call MatSetValues(S,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-    else if (n .eq. Ns-1) then
-      row(1) = i
-      col(1) = i-1
-      col(2) = i
-      val(1) = -0.5d0*dsqrt(dble(n+2*l+1)/dble(n+l+1))*dsqrt(dble(n)/dble(n+l))
-      val(2) = 1d0
-      call MatSetValues(S,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-    else 
-      row(1) = i
-      col(1) = i - 1
-      col(2) = i
-      col(3) = i + 1
-      val(1) = -0.5d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
-      val(2) = 1d0
-      val(3) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
-      call MatSetValues(S,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-    end if
-  end do 
+          write(strl,fmt) l
 
 
+          call MatCreate(PETSC_COMM_SELF,S,ierr);CHKERRA(ierr)
+          call MatSetSizes(S,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
+          call MatSetFromOptions(S,ierr);CHKERRA(ierr)
+          call MatSetUp(S,ierr);CHKERRA(ierr)
+          
+          call MatCreate(PETSC_COMM_SELF,H,ierr);CHKERRA(ierr)
+          call MatSetSizes(H,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
+          call MatSetFromOptions(H,ierr);CHKERRA(ierr)
+          call MatSetUp(H,ierr);CHKERRA(ierr)
+          
+
+        !-----------------------------------------------------------------------------------------
+        ! Build Overlap Matrix
+        !-----------------------------------------------------------------------------------------
+          allocate(col(Ns),val(Ns))
+
+           
+          do i = 0,Ns-1
+            n = i  
+            if (n .eq. 0) then 
+              row(1) = i
+              col(1) = i
+              col(2) = i+1
+              val(1) = 1d0
+              val(2) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
+              call MatSetValues(S,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+            else if (n .eq. Ns-1) then
+              row(1) = i
+              col(1) = i-1
+              col(2) = i
+              val(1) = -0.5d0*dsqrt(dble(n+2*l+1)/dble(n+l+1))*dsqrt(dble(n)/dble(n+l))
+              val(2) = 1d0
+              call MatSetValues(S,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+            else 
+              row(1) = i
+              col(1) = i - 1
+              col(2) = i
+              col(3) = i + 1
+              val(1) = -0.5d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
+              val(2) = 1d0
+              val(3) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
+              call MatSetValues(S,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+            end if
+          end do 
 
 
-  call MatAssemblyBegin(S,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
-  call MatAssemblyEnd(S,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
-
-!-----------------------------------------------------------------------------------------
-! Build Field-Free Matrix
-!-----------------------------------------------------------------------------------------
-  do i = 0,Ns-1  
-    n = i 
-    if (n .eq. 0) then 
-      ! Main diagonal
-      row(1) = i
-      col(1) = i
-      col(2) = i+1
-      val(1) = 0.5d0*k**2d0 - k*C0/dble(n+l+1)
-      val(2) = 0.25d0*k**2d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
-      call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-  
-      
-    else if (n .eq. Ns-1) then
-      row(1) = i
-      col(1) = i-1
-      col(2) = i
-      val(1) = 0.25d0*k**2d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
-      val(2) = 0.5d0*k**2d0 - k*C0/dble(n+l+1)
-      call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-    else 
-      row(1) = i
-      col(1) = i - 1
-      col(2) = i
-      col(3) = i + 1
-      val(1) = 0.25d0*k**2d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
-      val(2) = 0.5d0*k**2d0 - k*C0/dble(n+l+1)
-      val(3) = 0.25d0*k**2d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
-      call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-    end if
-  end do  
 
 
-  g = 2*(k/C) 
-  do i = 0, Ns-1
-    row(1)  = i
-    do n = 0, Ns-1
-      ierror = tuple_create(args, 4)
-      ierror = args%setitem(0, -i)
-      ierror = args%setitem(1, -n)
-      ierror = args%setitem(2, -n-i-2*l-1)
-      ierror = args%setitem(3, 1-g**2)
-      ierror = call_py(retval, opt, "hyp2f1", args)
-      ierror = cast_nonstrict(q, retval)
-      col(n+1) = n
-      val(n+1) = -k*dsqrt(dgamma(dble(n+1))*dgamma(dble(i+1))/(dble((n+l+1)*(i+l+1)) &
-      &*dgamma(dble(n+2*l+2))*dgamma(dble(i+2*l+2))))*Zc*dgamma(dble(n+i+2*l+2)) &
-      &/(dgamma(dble(n+1))*dgamma(dble(i+1)))*(g**dble(2*l+2)/(g+1)**dble(n+i+2*l+2))*q
-    end do
-    call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)  
-  end do 
+          call MatAssemblyBegin(S,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
+          call MatAssemblyEnd(S,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
 
-  do j = 1, Nshell 
-    g = 2d0*(k/b(j))
-    do i = 0, Ns-1
-      row(1)  = i
-      do n = 0, Ns-1
-        ierror = tuple_create(args, 4)
-        ierror = args%setitem(0, -i)
-        ierror = args%setitem(1, -n)
-        ierror = args%setitem(2, -n-i-2*l-1)
-        ierror = args%setitem(3, 1-g**2)
-        ierror = call_py(retval, opt, "hyp2f1", args)
-        ierror = cast_nonstrict(q, retval)
+        !-----------------------------------------------------------------------------------------
+        ! Build Field-Free Matrix
+        !-----------------------------------------------------------------------------------------
+          do i = 0,Ns-1  
+            n = i 
+            if (n .eq. 0) then 
+              ! Main diagonal
+              row(1) = i
+              col(1) = i
+              col(2) = i+1
+              val(1) = 0.5d0*k**2d0 - k*C0/dble(n+l+1)
+              val(2) = 0.25d0*k**2d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
+              call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+          
+              
+            else if (n .eq. Ns-1) then
+              row(1) = i
+              col(1) = i-1
+              col(2) = i
+              val(1) = 0.25d0*k**2d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
+              val(2) = 0.5d0*k**2d0 - k*C0/dble(n+l+1)
+              call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+            else 
+              row(1) = i
+              col(1) = i - 1
+              col(2) = i
+              col(3) = i + 1
+              val(1) = 0.25d0*k**2d0*dsqrt(dble(n)/dble(n+l))*dsqrt(dble(n+2*l+1)/dble(n+l+1))
+              val(2) = 0.5d0*k**2d0 - k*C0/dble(n+l+1)
+              val(3) = 0.25d0*k**2d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
+              call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+            end if
+          end do  
 
-        ierror = tuple_create(args, 4)
-        ierror = args%setitem(0, -i)
-        ierror = args%setitem(1, -n-1)
-        ierror = args%setitem(2, -n-i-2*l-2)
-        ierror = args%setitem(3, 1-g**2)
-        ierror = call_py(retval, opt, "hyp2f1", args)
-        ierror = cast_nonstrict(q2, retval)
+          if (dabs(Zc) .gt. 1d-15) then
+            g = 2*(k/C) 
+            do i = 0, Ns-1
+              row(1)  = i
+              do n = 0, Ns-1
+                ierror = tuple_create(args, 4)
+                ierror = args%setitem(0, -i)
+                ierror = args%setitem(1, -n)
+                ierror = args%setitem(2, -n-i-2*l-1)
+                ierror = args%setitem(3, 1-g**2)
+                ierror = call_py(retval, opt, "hyp2f1", args)
+                ierror = cast_nonstrict(q, retval)
+                col(n+1) = n
+                val(n+1) = -k*dsqrt(dgamma(dble(n+1))*dgamma(dble(i+1))/(dble((n+l+1)*(i+l+1)) &
+                &*dgamma(dble(n+2*l+2))*dgamma(dble(i+2*l+2))))*Zc*dgamma(dble(n+i+2*l+2)) &
+                &/(dgamma(dble(n+1))*dgamma(dble(i+1)))*(g**dble(2*l+2)/(g+1)**dble(n+i+2*l+2))*q
+              end do
+              call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)  
+            end do 
+          end if 
 
-        ierror = tuple_create(args, 4)
-        ierror = args%setitem(0, -i)
-        ierror = args%setitem(1, -n+1)
-        ierror = args%setitem(2, -n-i-2*l)
-        ierror = args%setitem(3, 1-g**2)
-        ierror = call_py(retval, opt, "hyp2f1", args)
-        ierror = cast_nonstrict(q3, retval)
+          if (Nshell .ne. 0) then
+            do j = 1, Nshell 
+              g = 2d0*(k/b(j))
+              do i = 0, Ns-1
+                row(1)  = i
+                do n = 0, Ns-1
+                  ierror = tuple_create(args, 4)
+                  ierror = args%setitem(0, -i)
+                  ierror = args%setitem(1, -n)
+                  ierror = args%setitem(2, -n-i-2*l-1)
+                  ierror = args%setitem(3, 1-g**2)
+                  ierror = call_py(retval, opt, "hyp2f1", args)
+                  ierror = cast_nonstrict(q, retval)
+
+                  ierror = tuple_create(args, 4)
+                  ierror = args%setitem(0, -i)
+                  ierror = args%setitem(1, -n-1)
+                  ierror = args%setitem(2, -n-i-2*l-2)
+                  ierror = args%setitem(3, 1-g**2)
+                  ierror = call_py(retval, opt, "hyp2f1", args)
+                  ierror = cast_nonstrict(q2, retval)
+
+          ierror = tuple_create(args, 4)
+          ierror = args%setitem(0, -i)
+          ierror = args%setitem(1, -n+1)
+          ierror = args%setitem(2, -n-i-2*l)
+          ierror = args%setitem(3, 1-g**2)
+          ierror = call_py(retval, opt, "hyp2f1", args)
+          ierror = cast_nonstrict(q3, retval)
         
-        col(n+1) = n
-        val(n+1) = -dsqrt(dgamma(dble(n+1))*dgamma(dble((i+1))) &
+          col(n+1) = n
+          val(n+1) = -dsqrt(dgamma(dble(n+1))*dgamma(dble((i+1))) &
                 & /(dble(n+l+1)*dble(i+l+1)*dgamma(dble(n+2*l+2))*dgamma(dble(i+2*l+2))))&
                 & *(0.5d0*a(j))*( 2d0*dble(n+l+1)*(dgamma(dble(n+i+2*l+2)) &
                 & /(dgamma(dble(n+1))*dgamma(dble(i+1))))*(g**dble(2*l+2)/(g+1d0)**dble(n+i+2*l+2))*q& 
@@ -445,10 +446,11 @@ do l = 0, lmax
                 & *(g**dble(2*l+2)/(g+1d0)**dble(n+i+2*l+3))*q2&
                 & -dble(n+2*l+1)*(dgamma(dble(n+i+2*l+1))/(dgamma(dble(n))*dgamma(dble(i+1))))&
                 & *(g**dble(2*l+2)/(g+1)**dble(n+i+2*l+1)) *q3)
+        end do
+        call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
       end do
-      call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-    end do
-  end do 
+    end do 
+  end if
   deallocate(col,val)
   call MatAssemblyBegin(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)
   call MatAssemblyEnd(H,MAT_FINAL_ASSEMBLY,ierr);CHKERRA(ierr)

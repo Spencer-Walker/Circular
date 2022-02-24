@@ -424,57 +424,61 @@ end interface
   ierror = get_sys_path(paths)
   ierror = paths%append("/home/becker/spwa4419/Documents/Circular/")
   ierror = import_py(opt, "mymodule")
-
-  do i = Istart, Iend-1
-    ret = reverse(i,Nl,Ns,mmax)
-    n1 = ret(1)
-    l = ret(2)
-    m = ret(3)
-    row(1)  = i
-    do n = 0, Ns-1
-      ierror = tuple_create(args, 6)
-      ierror = args%setitem(0,n)
-      ierror = args%setitem(1,n1)
-      ierror = args%setitem(2,l)
-      ierror = args%setitem(3,k)
-      ierror = args%setitem(4,Zc)
-      ierror = args%setitem(5,g)
-      ierror = call_py(retval, opt, "yukawa", args)
-      ierror = cast(q, retval)
-      call args%destroy
-      call retval%destroy
-      col(n+1) = forward(n,l,m,Nl,Ns,mmax)
-      val(n+1) = q
-    end do
-    call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
-  end do
-
-  do j = 1, Nshell
-    g = 2d0*(k/b(j))
+  if (dabs(Zc) .gt. 1d-15) then
+    g = 2*(k/C)
     do i = Istart, Iend-1
       ret = reverse(i,Nl,Ns,mmax)
       n1 = ret(1)
       l = ret(2)
       m = ret(3)
       row(1)  = i
-      val = 0
       do n = 0, Ns-1
-        ierror = tuple_create(args, 5)
+        ierror = tuple_create(args, 6)
         ierror = args%setitem(0,n)
         ierror = args%setitem(1,n1)
         ierror = args%setitem(2,l)
-        ierror = args%setitem(3,g)
-        ierror = args%setitem(4,a(j))
-        ierror = call_py(retval, opt, "shell", args)
+        ierror = args%setitem(3,k)
+        ierror = args%setitem(4,Zc)
+        ierror = args%setitem(5,g)
+        ierror = call_py(retval, opt, "yukawa", args)
         ierror = cast(q, retval)
         call args%destroy
         call retval%destroy
-        col(n+1) =  forward(n,l,m,Nl,Ns,mmax)
-        val(n+1) =  q
+        col(n+1) = forward(n,l,m,Nl,Ns,mmax)
+        val(n+1) = q
       end do
       call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
     end do
-  end do
+  end if 
+
+  if (Nshell .ne. 0) then
+    do j = 1, Nshell
+      g = 2d0*(k/b(j))
+      do i = Istart, Iend-1
+        ret = reverse(i,Nl,Ns,mmax)
+        n1 = ret(1)
+        l = ret(2)
+        m = ret(3)
+        row(1)  = i
+        val = 0
+        do n = 0, Ns-1
+          ierror = tuple_create(args, 5)
+          ierror = args%setitem(0,n)
+          ierror = args%setitem(1,n1)
+          ierror = args%setitem(2,l)
+          ierror = args%setitem(3,g)
+          ierror = args%setitem(4,a(j))
+          ierror = call_py(retval, opt, "shell", args)
+          ierror = cast(q, retval)
+          call args%destroy
+          call retval%destroy
+          col(n+1) =  forward(n,l,m,Nl,Ns,mmax)
+          val(n+1) =  q
+        end do
+        call MatSetValues(H,1,row,Ns,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
+      end do
+    end do
+  end if 
 
   ! DC Stark Shifts
   do i = Istart,Iend-1

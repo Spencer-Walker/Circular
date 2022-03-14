@@ -55,7 +55,7 @@ end interface
   PetscInt, parameter :: dp = kind(1.d0)
   PetscInt :: Ns, nev, ncv, mpd, maxits, Nl, tmp_int, h5_err, num_proc, proc_id
   PetscInt :: Istart, Iend, n, l, m, Nshell, Ntot, mmax, i, row(1), j, ierror
-  PetscInt :: n1
+  PetscInt :: n1, ic
   PetscInt, allocatable :: col(:)
   character(len = 24)   :: file_name 
   character(len = 300)   :: tmp_character
@@ -328,6 +328,7 @@ end interface
   end if 
 
   Ntot = forward(Ns-1,NL-1+abs(mmax),mmax,Nl,Ns,mmax)+1
+  print*, 'Ntot = ', Ntot
 
   call MatCreate(PETSC_COMM_WORLD,S,ierr);CHKERRA(ierr)
   call MatSetSizes(S,PETSC_DECIDE,PETSC_DECIDE,Ntot,Ntot,ierr);CHKERRA(ierr)
@@ -344,7 +345,6 @@ end interface
 !-----------------------------------------------------------------------------------------
 ! Build Overlap Matrix
 !-----------------------------------------------------------------------------------------
-  
   allocate(col(Ns),val(Ns))
   do i = Istart,Iend-1
     ret = reverse(i,Nl,Ns,mmax)
@@ -364,6 +364,7 @@ end interface
       col(2) = i
       val(1) = -0.5d0*dsqrt(dble(n+2*l+1)/dble(n+l+1))*dsqrt(dble(n)/dble(n+l))
       val(2) = 1d0
+      
       call MatSetValues(S,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
     else 
       row(1) = i
@@ -494,9 +495,21 @@ end interface
         col(2) = forward(n+1,l+1,m,Nl,Ns,mmax)
 
         val(1) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(2) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
-
+        val(2) = -0.25d0*k**(-1d0)*dsqrt(dble(n+1))*dsqrt(dble(n+2*l+4))*dsqrt(dble(n+2*l+3))*dsqrt(dble(n+2*l+2))/(dsqrt(dble(n+l+1))*dsqrt(dble(n+l+3)))
+       
         val = F*angular*val
+        
+        do ic = 1,2
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 1'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 1'
+          end if
+        end do 
+        
         call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,2,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
 
@@ -507,9 +520,21 @@ end interface
 
         val(1) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
         val(2) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(3) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
+        val(3) = -0.25d0*k**(-1d0)*dsqrt(dble(n+1))*dsqrt(dble(n+2*l+4))*dsqrt(dble(n+2*l+3))*dsqrt(dble(n+2*l+2))/(dsqrt(dble(n+l+1))*dsqrt(dble(n+l+3)))
         
         val = F*angular*val
+
+        do ic = 1,3
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 2'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 2'
+          end if
+        end do
+
         call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,3,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
 
@@ -522,9 +547,21 @@ end interface
         val(1) = 0.5d0*k**(-1d0)*dble(2*n+3*l+2)*dsqrt(dble(n*(n-1))/dble((n+l+1)*(n+l)))
         val(2) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
         val(3) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(4) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
+        val(4) = -0.25d0*k**(-1d0)*dsqrt(dble(n+1))*dsqrt(dble(n+2*l+4))*dsqrt(dble(n+2*l+3))*dsqrt(dble(n+2*l+2))/(dsqrt(dble(n+l+1))*dsqrt(dble(n+l+3)))
 
         val = F*angular*val
+
+        do ic = 1,4
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 3'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 3'
+          end if
+        end do
+
         call MatSetValues(H,1,row,4,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,4,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
 
@@ -534,12 +571,24 @@ end interface
         col(3) = forward(n-1,l+1,m,Nl,Ns,mmax)
         col(4) = forward(n,l+1,m,Nl,Ns,mmax)
 
-        val(1) = -0.25d0*k**(-1d0)*dsqrt(dble(n*(n-1)*(n-2)*(n+2*l+1))/dble((n+l+1)*(n+l-1)))
+        val(1) = -0.25d0*k**(-1d0)*dsqrt(dble(n))*dsqrt(dble(n-1))*dsqrt(dble(n-2))*dsqrt(dble(n+2*l+1))/(dsqrt(dble(n+l+1))*dsqrt(dble(n+l-1)))
         val(2) = 0.5d0*k**(-1d0)*dble(2*n+3*l+2)*dsqrt(dble(n*(n-1))/dble((n+l+1)*(n+l)))
         val(3) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
         val(4) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
 
         val = F*angular*val
+
+        do ic = 1,4
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 4'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 4'
+          end if
+        end do
+
         call MatSetValues(H,1,row,4,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,4,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
 
@@ -550,13 +599,25 @@ end interface
         col(4) = forward(n,l+1,m,Nl,Ns,mmax)
         col(5) = forward(n+1,l+1,m,Nl,Ns,mmax)
 
-        val(1) = -0.25d0*k**(-1d0)*dsqrt(dble(n*(n-1)*(n-2)*(n+2*l+1))/dble((n+l+1)*(n+l-1)))
+        val(1) = -0.25d0*k**(-1d0)*dsqrt(dble(n))*dsqrt(dble(n-1))*dsqrt(dble(n-2))*dsqrt(dble(n+2*l+1))/(dsqrt(dble(n+l+1))*dsqrt(dble(n+l-1)))
         val(2) = 0.5d0*k**(-1d0)*dble(2*n+3*l+2)*dsqrt(dble(n*(n-1))/dble((n+l+1)*(n+l)))
         val(3) = -1.5d0*k**(-1d0)*dsqrt(dble(n*(n+2*l+2)))
         val(4) = 0.5d0*k**(-1d0)*dble(2*n+l+2)*dsqrt(dble((n+2*l+2)*(n+2*l+3))/dble((n+l+1)*(n+l+2)))
-        val(5) = -0.25d0*k**(-1d0)*dsqrt(dble((n+1)*(n+2*l+4)*(n+2*l+3)*(n+2*l+2))/dble((n+l+1)*(n+l+3)))
+        val(5) = -0.25d0*k**(-1d0)*dsqrt(dble(n+1))*dsqrt(dble(n+2*l+4))*dsqrt(dble(n+2*l+3))*dsqrt(dble(n+2*l+2))/(dsqrt(dble(n+l+1))*dsqrt(dble(n+l+3)))
 
         val = F*angular*val 
+
+        do ic = 1,5
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 5'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 5'
+          end if
+        end do
+
         call MatSetValues(H,1,row,5,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,5,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
       end if 
@@ -581,6 +642,18 @@ end interface
         val(2) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
 
         val = -0.5d0*w*angular*val
+
+        do ic = 1,2
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 6'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 6'
+          end if
+        end do
+
         call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,2,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
 
@@ -592,6 +665,18 @@ end interface
         val(2) = 1d0
 
         val = -0.5d0*w*angular*val
+
+        do ic = 1,2
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 7'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 7'
+          end if
+        end do
+
         call MatSetValues(H,1,row,2,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,2,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
 
@@ -605,6 +690,18 @@ end interface
         val(3) = -0.5d0*dsqrt(dble(n+2*l+2)/dble(n+l+2))*dsqrt(dble(n+1)/dble(n+l+1))
 
         val = -0.5d0*w*angular*val
+
+        do ic = 1,3
+          if (isnan(zabs(val(ic)))) then
+            print*, ic, n, l, m, k
+            stop 'val is NaN 8'
+          end if
+          if (zabs(val(ic)) .eq. zabs(val(ic))+1) then
+            print*, ic, n, l, m, k
+            stop 'val is Inf 8'
+          end if
+        end do
+
         call MatSetValues(H,1,row,3,col,val,ADD_VALUES,ierr);CHKERRA(ierr)
         call MatSetValues(H,3,col,1,row,val,ADD_VALUES,ierr);CHKERRA(ierr)
       end if 

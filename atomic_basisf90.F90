@@ -281,11 +281,11 @@ use forpy_mod
   else
     call PetscPrintf(MPI_COMM_WORLD, "EPSWhich not supported defaulting to EPS_SMALLEST_REAL\n", ierr)
     CHKERRA(ierr)
-            eps_which = EPS_SMALLEST_REAL
-          end if 
+    eps_which = EPS_SMALLEST_REAL
+  end if 
 
 
-          Ntot = Ns
+  Ntot = Ns
 
 
         do l = 0, lmax
